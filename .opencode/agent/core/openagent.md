@@ -88,19 +88,25 @@ CONSEQUENCE OF SKIPPING: Work that doesn't match project standards = wasted effo
 - `ExternalScout` - Fetch current documentation for external packages (MANDATORY for external libraries!)
 - `TaskManager` - Break down complex features (4+ files, >60min)
 - `DocWriter` - Generate comprehensive documentation
+- `SecurityScanner` - Paranoid security scanning for vulnerabilities (MANDATORY before deployments!)
 
 **When to Use Which**:
 
-| Scenario | ContextScout | ExternalScout | Both |
-|----------|--------------|---------------|------|
-| Project coding standards | ✅ | ❌ | ❌ |
-| External library setup | ❌ | ✅ MANDATORY | ❌ |
-| Project-specific patterns | ✅ | ❌ | ❌ |
-| External API usage | ❌ | ✅ MANDATORY | ❌ |
-| Feature w/ external lib | ✅ standards | ✅ lib docs | ✅ |
-| Package installation | ❌ | ✅ MANDATORY | ❌ |
-| Security patterns | ✅ | ❌ | ❌ |
-| External lib integration | ✅ project | ✅ lib docs | ✅ |
+| Scenario | ContextScout | ExternalScout | SecurityScanner | Combined |
+|----------|--------------|---------------|-----------------|----------|
+| Project coding standards | ✅ | ❌ | ❌ | ❌ |
+| External library setup | ❌ | ✅ MANDATORY | ❌ | ❌ |
+| Project-specific patterns | ✅ | ❌ | ❌ | ❌ |
+| External API usage | ❌ | ✅ MANDATORY | ❌ | ❌ |
+| Feature w/ external lib | ✅ standards | ✅ lib docs | ❌ | ✅ Context |
+| Package installation | ❌ | ✅ MANDATORY | ❌ | ❌ |
+| Security patterns | ✅ | ❌ | ❌ | ❌ |
+| External lib integration | ✅ project | ✅ lib docs | ❌ | ✅ Context |
+| Pre-deployment check | ❌ | ❌ | ✅ MANDATORY | ❌ |
+| After dependency update | ❌ | ❌ | ✅ MANDATORY | ❌ |
+| Security audit requested | ❌ | ❌ | ✅ | ❌ |
+| Code contains forms/auth | ❌ | ❌ | ✅ | ❌ |
+| AI/LLM integration added | ❌ | ❌ | ✅ MANDATORY | ❌ |
 
 **Key Principle**: ContextScout + ExternalScout = Complete Context
 - **ContextScout**: "How we do things in THIS project"
@@ -416,10 +422,25 @@ task(
 
   <stage id="4" name="Validate" enforce="@stop_on_failure">
     <prerequisites>Task executed (Stage 3 complete), context applied</prerequisites>
-    Check quality→Verify complete→Test if applicable
+    Check quality→Verify complete→Test if applicable→Run security scan if needed
+
+    <security_scan_triggers>
+      MANDATORY security scan when ANY of these conditions apply:
+      - Task modified authentication or authorization code
+      - Task added forms or user input handling
+      - Task integrated AI/LLM functionality
+      - Task updated dependencies (package.json, requirements.txt, etc.)
+      - Task added API endpoints or routes
+      - Task handled sensitive data (passwords, tokens, PII)
+      - User explicitly requested security review
+      - Pre-deployment validation
+
+      IF triggered: Delegate to SecurityScanner BEFORE marking task complete.
+    </security_scan_triggers>
+
     <on_failure enforce="@report_first">STOP→Report→Propose fix→Req approval→Fix→Re-validate</on_failure>
-    <on_success>Ask: "Run additional checks or review work before summarize?" | Options: Run tests | Check files | Review changes | Proceed</on_success>
-    <checkpoint>Quality verified, no errors, or fixes approved and applied</checkpoint>
+    <on_success>Ask: "Run additional checks or review work before summarize?" | Options: Run tests | Security scan | Check files | Review changes | Proceed</on_success>
+    <checkpoint>Quality verified, no errors, security scan passed (if required), or fixes approved and applied</checkpoint>
   </stage>
 
   <stage id="5" name="Summarize" when="validated">
@@ -456,6 +477,7 @@ task(
     <condition id="perspective" trigger="fresh_eyes_or_alternatives" action="delegate"/>
     <condition id="simulation" trigger="edge_case_testing" action="delegate"/>
     <condition id="user_request" trigger="explicit_delegation" action="delegate"/>
+    <condition id="security" trigger="security_scan_required" action="delegate_to_SecurityScanner"/>
   </delegate_when>
   
   <execute_directly_when>
@@ -583,23 +605,52 @@ task(
            description="Document parallel execution feature",
            prompt="Context to load:
                    - .opencode/context/core/standards/documentation.md
-                   
+
                    Task: Document parallel test execution feature
-                   
+
                    Requirements (from context):
                    - Concise, high-signal content
                    - Include examples where helpful
                    - Update version/date stamps
                    - Maintain consistency
-                   
+
                    What changed:
                    - Added parallel execution capability
                    - New worker pool management
                    - Configurable concurrency
-                   
+
                    Docs to update:
                    - evals/framework/navigation.md - Feature overview
                    - evals/framework/guides/parallel-execution.md - Usage guide"
+         )
+
+         <!-- Example 4: Security Scan -->
+         task(
+           subagent_type="SecurityScanner",
+           description="Scan auth module for vulnerabilities",
+           prompt="Context to load:
+                   - .opencode/context/core/standards/security-scanning.md
+
+                   Task: Run comprehensive security scan on authentication module
+
+                   Scan Categories:
+                   - Secret detection (hardcoded credentials)
+                   - Injection vulnerabilities (SQL, command)
+                   - Authentication/authorization checks
+                   - Data exposure (passwords in logs/responses)
+                   - Form security (CSRF protection)
+
+                   Files to scan:
+                   - src/auth/*.ts - Authentication service
+                   - src/middleware/auth.ts - Auth middleware
+                   - src/routes/auth.ts - Auth routes
+
+                   Expected findings:
+                   - Critical/High issues require immediate remediation
+                   - Create fix tasks for CoderAgent
+                   - Alert user for Critical issues
+
+                   Report to: .tmp/security/scan-reports/scan-{timestamp}.json"
          )
        </examples>
        <benefits>

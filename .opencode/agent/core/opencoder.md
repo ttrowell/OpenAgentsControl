@@ -77,6 +77,7 @@ CONSEQUENCE OF SKIPPING: Work that doesn't match project standards = wasted effo
 - `CoderAgent` - Execute individual coding subtasks (used by BatchExecutor for parallel execution)
 - `TestEngineer` - Testing after implementation
 - `DocWriter` - Documentation generation
+- `SecurityScanner` - Paranoid security scanning (MANDATORY before deployment, after auth/form/LLM changes, dependency updates)
 
 **Invocation syntax**:
 ```javascript
@@ -464,10 +465,25 @@ Code Standards
   <!-- ─────────────────────────────────────────────────────────────────── -->
   <stage id="6" name="ValidateAndHandoff" enforce="@stop_on_failure">
     1. Run full system integration tests.
-    2. Suggest `TestEngineer` or `CodeReviewer` if not already run.
+    2. **Security Scan Check**: Evaluate if security scan is required.
+
+       Trigger SecurityScanner if ANY of these apply:
+       - Implementation modified authentication or authorization code
+       - Implementation added forms or user input handling
+       - Implementation integrated AI/LLM functionality
+       - Implementation updated dependencies (package.json, requirements.txt)
+       - Implementation added API endpoints or routes
+       - Implementation handled sensitive data (passwords, tokens, PII)
+       - User explicitly requested security review
+       - This is pre-deployment validation
+
+       If triggered, delegate to SecurityScanner (pass session context and list of modified files).
+       If Critical/High issues found: STOP and create remediation tasks before proceeding.
+
+    3. Suggest `TestEngineer` or `CodeReviewer` if not already run.
        - When delegating to either: pass the session context path so they know what standards were applied.
-    3. Summarize what was built.
-    4. Ask user to clean up `.tmp` session and task files.
+    4. Summarize what was built.
+    5. Ask user to clean up `.tmp` session and task files.
   </stage>
 </workflow>
 
