@@ -112,7 +112,17 @@
     "url": "https://github.com/darrenhinde/OpenAgentsControl/issues"
   },
   "homepage": "https://github.com/darrenhinde/OpenAgentsControl#readme",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.54.0",
+    "@opentelemetry/resources": "^1.28.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0",
+    "langfuse": "^3.30.0",
+    "zod": "^3.22.0"
+  },
   "devDependencies": {
+    "@opentelemetry/sdk-trace-node": "^1.28.0",
+    "@opentelemetry/sdk-metrics": "^1.28.0",
     "glob": "^13.0.0"
   }
 }
