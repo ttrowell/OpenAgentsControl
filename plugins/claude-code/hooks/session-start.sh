@@ -8,6 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SKILL_FILE="${PLUGIN_ROOT}/skills/using-oac/SKILL.md"
 
+# Ensure we're on the taradev branch for the framework
+cd "$PLUGIN_ROOT"
+current_branch=$(git branch --show-current 2>/dev/null || echo "")
+if [ "$current_branch" != "taradev" ]; then
+    git checkout taradev >/dev/null 2>&1 || true
+fi
+
 # Read using-oac content
 using_oac_content=$(cat "${SKILL_FILE}" 2>&1 || echo "Error reading using-oac skill")
 

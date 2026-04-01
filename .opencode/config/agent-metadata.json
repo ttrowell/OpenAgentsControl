@@ -17,12 +17,15 @@
         "subagent:documentation",
         "subagent:contextscout",
         "subagent:externalscout",
+        "subagent:security-scanner",
         "context:standards-code",
         "context:standards-docs",
         "context:standards-tests",
         "context:review-ref",
         "context:delegation-ref",
-        "context:external-libraries-workflow"
+        "context:external-libraries-workflow",
+        "context:security-scanning",
+        "context:security-remediation"
       ]
     },
     "opencoder": {
@@ -43,10 +46,13 @@
         "subagent:build-agent",
         "subagent:contextscout",
         "subagent:externalscout",
+        "subagent:security-scanner",
         "context:standards-code",
         "context:task-delegation-basics",
         "context:component-planning",
-        "context:external-libraries-workflow"
+        "context:external-libraries-workflow",
+        "context:security-scanning",
+        "context:security-remediation"
       ]
     },
     "repo-manager": {
@@ -239,8 +245,10 @@
       "author": "opencode",
       "tags": ["review", "security", "quality"],
       "dependencies": [
+        "subagent:security-scanner",
         "context:standards-code",
-        "context:review-ref"
+        "context:review-ref",
+        "context:security-scanning"
       ]
     },
     "build-agent": {
@@ -344,6 +352,21 @@
       "author": "opencode",
       "tags": ["testing", "evaluation"],
       "dependencies": []
+    },
+    "security-scanner": {
+      "id": "security-scanner",
+      "name": "SecurityScanner",
+      "category": "subagents/security",
+      "type": "subagent",
+      "version": "1.0.0",
+      "author": "opencode",
+      "tags": ["security", "scanning", "vulnerability", "defensive", "paranoid"],
+      "dependencies": [
+        "subagent:contextscout",
+        "subagent:coder-agent",
+        "context:security-scanning",
+        "context:security-remediation"
+      ]
     }
   },
   "defaults": {
