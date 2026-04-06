@@ -1,0 +1,16 @@
+{
+  "provider": "langfuse",
+  "enabled": true,
+  "level": "detailed",
+  "langfuse": {
+    "publicKey": "pk-lf-01a87f1e-917d-40fc-aa2a-5418a4c8325f",
+    "secretKey": "sk-lf-46e22ca8-ef09-424d-b84f-0241bb0fa926",
+    "baseUrl": "https://us.cloud.langfuse.com",
+    "project": "cmngesf8w00mnad07l030g6iz"
+  },
+  "attributes": {
+    "service.name": "openagents-control",
+    "service.version": "0.7.1",
+    "deployment.environment": "development"
+  }
+}

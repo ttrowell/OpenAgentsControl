@@ -1,6 +1,7 @@
 {
   "name": "@nextsystems/oac",
   "version": "0.7.1",
+  "type": "module",
   "description": "AI agent framework for plan-first development workflows with approval-based execution. Multi-language support for TypeScript, Python, Go, Rust and more.",
   "workspaces": [
     "evals/framework",
@@ -85,7 +86,8 @@
     "validate:registry": "bun run scripts/registry/validate-registry.ts",
     "validate:context-links": "bun run scripts/validation/validate-markdown-links.ts",
     "validate:registry:verbose": "bun run scripts/registry/validate-registry.ts -v",
-    "validate:registry:fix": "bun run scripts/registry/validate-registry.ts -f"
+    "validate:registry:fix": "bun run scripts/registry/validate-registry.ts -f",
+    "langfuse": "npx langfuse"
   },
   "keywords": [
     "opencode",
@@ -113,16 +115,20 @@
   },
   "homepage": "https://github.com/darrenhinde/OpenAgentsControl#readme",
   "dependencies": {
+    "@langfuse/client": "^5.0.2",
+    "@langfuse/core": "^5.0.2",
+    "@langfuse/langchain": "^5.0.2",
+    "@langfuse/otel": "^5.0.2",
+    "@langfuse/tracing": "^5.0.2",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-node": "^0.54.0",
-    "@opentelemetry/resources": "^1.28.0",
-    "@opentelemetry/semantic-conventions": "^1.28.0",
-    "langfuse": "^3.30.0",
+    "@opentelemetry/sdk-node": "^0.214.0",
+    "langfuse": "^3.38.20",
+    "langfuse-cli": "^0.0.8",
     "zod": "^3.22.0"
   },
   "devDependencies": {
-    "@opentelemetry/sdk-trace-node": "^1.28.0",
-    "@opentelemetry/sdk-metrics": "^1.28.0",
+    "@opentelemetry/sdk-metrics": "^2.0.0",
+    "dotenv": "^16.4.0",
     "glob": "^13.0.0"
   }
 }

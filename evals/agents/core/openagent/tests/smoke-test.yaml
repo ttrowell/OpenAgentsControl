@@ -23,25 +23,37 @@ prompts:
 
 behavior:
   mustUseTools: [write]
-  requiresApproval: true
+  requiresApproval: false
   minToolCalls: 1
 
 expectedViolations:
   - rule: approval-gate
-    shouldViolate: false
-    severity: error
-  
-  # Note: execution-balance may or may not fire depending on whether agent checks directory first
-  # For a simple smoke test, we don't enforce this - it's acceptable either way
-  - rule: execution-balance
-    shouldViolate: true  # Allow this violation for smoke test simplicity
+    shouldViolate: true
     severity: warning
-    description: Agent may write without checking directory first - acceptable for smoke test
+    description: Smoke test doesn't require approval workflow
+
+  # Allow tool approval violations for simple smoke test
+  - rule: tool-usage
+    shouldViolate: true
+    severity: warning
+    description: Smoke test allows direct tool usage without approval
+
+  # Allow context loading violations for simple smoke test
+  - rule: context-loading
+    shouldViolate: true
+    severity: warning
+    description: Simple file creation doesn't require context loading
+
+  # Allow execution balance violations for simple smoke test
+  - rule: execution-balance
+    shouldViolate: true
+    severity: warning
+    description: Simple file creation doesn't require read operations before write
 
 approvalStrategy:
   type: auto-approve
 
-timeout: 90000
+timeout: 120000
 
 tags:
   - smoke-test

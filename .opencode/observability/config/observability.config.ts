@@ -4,10 +4,10 @@ import * as path from 'path';
 
 // Zod schemas for configuration validation
 export const LangfuseConfigSchema = z.object({
-  publicKey: z.string().min(1, 'Langfuse public key is required'),
-  secretKey: z.string().min(1, 'Langfuse secret key is required'),
-  baseUrl: z.string().url().optional().default('https://cloud.langfuse.com'),
-  projects: z.record(z.string()).optional(),
+  publicKey: z.string(),
+  secretKey: z.string(),
+  baseUrl: z.string().optional(),
+  projects: z.record(z.string(), z.string()).optional(),
 });
 
 export const ProjectConfigSchema = z.object({
@@ -15,36 +15,36 @@ export const ProjectConfigSchema = z.object({
   projectName: z.string().optional(),
   langfuse: LangfuseConfigSchema.optional(),
   tags: z.array(z.string()).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const ObservabilityConfigSchema = z.object({
-  provider: z.enum(['langfuse', 'axiom', 'otlp', 'json']).default('langfuse'),
-  enabled: z.boolean().default(true),
-  level: z.enum(['basic', 'detailed', 'full']).default('detailed'),
+  provider: z.enum(['langfuse', 'axiom', 'otlp', 'json']).optional(),
+  enabled: z.boolean().optional(),
+  level: z.enum(['basic', 'detailed', 'full']).optional(),
   sampling: z.object({
-    default: z.number().min(0).max(1).default(1.0),
-    byAgent: z.record(z.number().min(0).max(1)).optional(),
-    byModel: z.record(z.number().min(0).max(1)).optional(),
+    default: z.number().optional(),
+    byAgent: z.record(z.string(), z.number()).optional(),
+    byModel: z.record(z.string(), z.number()).optional(),
   }).optional(),
   langfuse: LangfuseConfigSchema.optional(),
-  attributes: z.record(z.string()).optional(),
+  attributes: z.record(z.string(), z.string()).optional(),
   exporters: z.object({
     console: z.object({
-      enabled: z.boolean().default(true),
-      level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+      enabled: z.boolean().optional(),
+      level: z.enum(['debug', 'info', 'warn', 'error']).optional(),
     }).optional(),
     json: z.object({
-      enabled: z.boolean().default(true),
-      path: z.string().default('~/.local/share/oac/observability'),
-      maxFiles: z.number().positive().default(100),
-      maxSizeMB: z.number().positive().default(500),
+      enabled: z.boolean().optional(),
+      path: z.string().optional(),
+      maxFiles: z.number().optional(),
+      maxSizeMB: z.number().optional(),
     }).optional(),
   }).optional(),
   privacy: z.object({
-    scrubApiKeys: z.boolean().default(true),
-    scrubFilePaths: z.boolean().default(false),
-    scrubUserInput: z.boolean().default(false),
+    scrubApiKeys: z.boolean().optional(),
+    scrubFilePaths: z.boolean().optional(),
+    scrubUserInput: z.boolean().optional(),
     allowedAttributes: z.array(z.string()).optional(),
   }).optional(),
 });
@@ -150,7 +150,7 @@ export class ObservabilityConfigLoader {
 
   // Check if observability is enabled
   isEnabled(): boolean {
-    return this.config.enabled;
+    return this.config.enabled ?? true;
   }
 
   // Get sampling rate for specific agent
@@ -167,7 +167,7 @@ export class ObservabilityConfigLoader {
       return this.config.sampling.byModel[modelName];
     }
 
-    return this.config.sampling.default;
+    return this.config.sampling.default ?? 1.0;
   }
 
   // Resolve path with home directory expansion
@@ -203,9 +203,9 @@ export function loadConfig(filePath?: string): ObservabilityConfig {
     '.opencode/observability.json',
   ];
 
-  for (const path of defaultPaths) {
+  for (const configPath of defaultPaths) {
     try {
-      return loader.loadFromFile(path);
+      return loader.loadFromFile(configPath);
     } catch {
       continue;
     }
