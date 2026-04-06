@@ -164,7 +164,7 @@ export function getModelSummary(): {
   let totalCost = 0;
   let totalErrors = 0;
 
-  for (const metrics of modelMetrics.values()) {
+  for (const metrics of Array.from(modelMetrics.values())) {
     totalInvocations += metrics.invocations;
     totalTokens += metrics.totalInputTokens + metrics.totalOutputTokens;
     totalCost += metrics.totalCost;

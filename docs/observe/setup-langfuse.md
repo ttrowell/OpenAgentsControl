@@ -180,6 +180,34 @@ node -e '
 
 The observability system includes collectors for session and model metrics:
 
+### Session Linking
+
+Sessions are automatically linked to traces using Langfuse's session feature. When you call `startSession()`, all subsequent traces within that session are automatically linked.
+
+```typescript
+import { startSession } from './observability/collectors/session-collector.ts';
+
+// Start a session - this creates a session in Langfuse
+await startSession({
+  sessionId: 'my-session-123',
+  userId: 'user@example.com',
+  agentName: 'openagent'
+});
+
+// All traces after this point are automatically linked to this session
+```
+
+**Viewing session-linked traces:**
+1. Go to Langfuse dashboard → Sessions view
+2. Find your session by ID
+3. Click to see all linked traces
+
+**API verification:**
+```bash
+curl -s -u "pk-lf-xxx:sk-lf-xxx" \
+  "https://us.cloud.langfuse.com/api/public/sessions?limit=10"
+```
+
 ### Session Collector
 
 Track session-level events:
@@ -236,6 +264,85 @@ npx tsx .opencode/scripts/test-collectors.ts
 ```
 
 This demonstrates both session and model collection with sample data.
+
+## Auto-Instrumentation Hooks
+
+For easier tracing integration, use the auto-instrumentation hooks:
+
+### Quick Start
+
+```typescript
+import { instrumentedTool, instrumentedLLM, instrumentedAgent } from './observability/hooks/auto-instrument.ts';
+
+// Instrument a tool call
+const result = await instrumentedTool('Read', { path: 'file.txt' }, 
+  () => fs.readFile('file.txt')
+);
+
+// Instrument an LLM call (model detected automatically)
+const response = await instrumentedLLM(
+  { messages: [{ role: 'user', content: 'Hello' }] },
+  (config) => openai.chat.completions.create(config)
+);
+
+// Instrument an agent task
+const result = await instrumentedAgent('code-review', { repo: 'my-app' },
+  async (span) => {
+    span.update({ status: 'analyzing' });
+    return await runAnalysis();
+  }
+);
+```
+
+### Model Detection
+
+The hooks automatically detect the model used:
+
+1. **API response headers** (most accurate) - e.g., `x-anthropic-model`
+2. **Environment variable** (`CURRENT_MODEL`)
+3. **Manual override** (via config parameter)
+
+```typescript
+// Set model for subsequent calls
+import { setCurrentModel } from './observability/hooks/auto-instrument.ts';
+
+setCurrentModel('claude-3-5-sonnet-20241022');
+```
+
+### Tool Collector
+
+Track tool execution metrics:
+
+```typescript
+import { recordTool, getToolSummary, getAllToolMetrics } from './observability/collectors/tool-collector.ts';
+
+recordTool('Read', true, 150);  // name, success, latencyMs
+recordTool('Bash', false, 500, 'Permission denied');
+
+const summary = getToolSummary();
+console.log(`${summary.totalInvocations} calls, ${summary.avgSuccessRate}% success`);
+```
+
+### Cost Collector
+
+Track costs and link to traces:
+
+```typescript
+import { recordCost, getCostSummary, formatCurrency } from './observability/collectors/cost-collector.ts';
+
+recordCost('claude-3-5-sonnet-20241022', 1000, 500);
+
+const summary = getCostSummary();
+console.log(`Total: ${formatCurrency(summary.totalCost)}`);
+```
+
+### Test Auto-Instrumentation
+
+Run the auto-instrumentation test:
+
+```bash
+npx tsx .opencode/scripts/test-auto-instrument.ts
+```
 
 ## CLI Commands Reference
 

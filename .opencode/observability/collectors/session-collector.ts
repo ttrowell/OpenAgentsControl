@@ -5,9 +5,12 @@
  * - Creating traces with session context (sessionId, userId)
  * - Tracking session lifecycle events
  * - Linking session metrics to traces
+ * 
+ * IMPORTANT: Uses Langfuse's sessionId field for proper session linking
+ * @see https://langfuse.com/docs/observability/features/sessions
  */
 
-import { startActiveObservation } from "@langfuse/tracing";
+import { startActiveObservation, propagateAttributes } from "@langfuse/tracing";
 import * as os from "node:os";
 
 // Types
@@ -47,6 +50,11 @@ const formatTimestamp = (date: Date = new Date()): string => date.toISOString();
 
 /**
  * Start a new session observation
+ * 
+ * This creates a trace with the sessionId properly linked in Langfuse.
+ * Uses propagateAttributes to create the session and link traces.
+ * 
+ * @see https://langfuse.com/docs/observability/features/sessions
  */
 export async function startSession(context: SessionContext): Promise<void> {
   currentSession = context;
@@ -54,17 +62,30 @@ export async function startSession(context: SessionContext): Promise<void> {
   toolCount = 0;
   errorCount = 0;
 
-  await startActiveObservation("session:start", async (span) => {
-    span.update({
-      input: { action: "session_start", sessionId: context.sessionId },
-      metadata: {
-        sessionId: context.sessionId,
-        userId: context.userId || getUsername(),
-        agentName: context.agentName,
-        projectPath: context.projectPath,
-        hostname: getHostname(),
-        startTime: formatTimestamp(),
-      },
+  // Create session within propagated context
+  // This ensures the session is created and traces are linked
+  await propagateAttributes({
+    sessionId: context.sessionId,
+    userId: context.userId || getUsername(),
+    metadata: {
+      agentName: context.agentName || "",
+      projectPath: context.projectPath || "",
+      hostname: getHostname(),
+    },
+    tags: ["oac-session"],
+  }, async () => {
+    // Create the initial span within the propagated context
+    // This span will have sessionId/userId set via context propagation
+    await startActiveObservation("session:start", async (span) => {
+      span.update({
+        input: { action: "session_start", sessionId: context.sessionId },
+        metadata: {
+          startTime: formatTimestamp(),
+          agentName: context.agentName || "",
+          projectPath: context.projectPath || "",
+          hostname: getHostname(),
+        },
+      });
     });
   });
 }
