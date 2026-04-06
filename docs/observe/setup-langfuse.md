@@ -21,7 +21,8 @@
 └── scripts/
     ├── test-langfuse.mjs      # Basic Langfuse test
     ├── test-collectors.ts     # Collectors integration test
-    └── test-auto-instrument.ts # Full auto-instrumentation test
+    ├── test-auto-instrument.ts # Full auto-instrumentation test
+    └── test-rich-context.ts   # Rich context test with full metadata
 ```
 
 ## Prerequisites
@@ -491,6 +492,24 @@ This comprehensive test demonstrates:
 - Tool instrumentation with success/failure tracking
 - LLM call instrumentation with cost calculation
 - Cost and tool summary reporting
+
+### Test Rich Context
+
+Run the rich context test to verify all metadata is captured:
+
+```bash
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx LANGFUSE_SECRET_KEY=sk-lf-xxx \
+  LANGFUSE_BASE_URL=https://us.cloud.langfuse.com \
+  npx tsx .opencode/scripts/test-rich-context.ts
+```
+
+This test sends traces with full context including:
+- Build info (git hash, branch, version)
+- System info (hostname, platform, node version)
+- Agent/task/user context
+- Error spans with full stack traces
+
+After running, filter by the session ID shown in output to verify metadata in the Langfuse dashboard.
 
 ## CLI Commands Reference
 
