@@ -176,6 +176,67 @@ node -e '
 '
 ```
 
+## Collectors
+
+The observability system includes collectors for session and model metrics:
+
+### Session Collector
+
+Track session-level events:
+
+```typescript
+import { startSession, recordToolCall, recordInference, endSession } from './observability/collectors/session-collector.ts';
+
+// Start a session
+await startSession({
+  sessionId: 'my-session-123',
+  userId: 'user@example.com',
+  agentName: 'openagent'
+});
+
+// Record tool calls
+await recordToolCall('read', true, 150);  // toolName, success, latencyMs
+await recordToolCall('bash', false, 500, { error: 'Permission denied' });
+
+// Record LLM inference
+await recordInference('claude-3-5-sonnet-20241022', 500, 150, 1200);
+
+// End session and get metrics
+const metrics = await endSession();
+console.log(`Session complete: ${metrics.toolCount} tools, ${metrics.successRate}% success`);
+```
+
+### Model Collector
+
+Track model performance and costs:
+
+```typescript
+import { recordInference, getModelSummary, formatCost } from './observability/collectors/model-collector.ts';
+
+// Record inference
+recordInference({
+  model: 'claude-3-5-sonnet-20241022',
+  inputTokens: 1000,
+  outputTokens: 500,
+  latencyMs: 1500,
+  cost: 0.0225
+});
+
+// Get summary
+const summary = getModelSummary();
+console.log(`Total cost: ${formatCost(summary.totalCost)}`);
+```
+
+### Test Collectors
+
+Run the collectors test script:
+
+```bash
+npx tsx .opencode/scripts/test-collectors.ts
+```
+
+This demonstrates both session and model collection with sample data.
+
 ## CLI Commands Reference
 
 ```bash
