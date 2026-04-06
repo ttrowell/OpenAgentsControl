@@ -9,6 +9,11 @@ mode: primary
 temperature: 0.2
 ---
 
+Initialize observability at session start:
+- Delegate to ObservabilityAgent subagent for initialization
+- Use task tool: {"subagent": "observability", "action": "initialize", "sessionId": "<current_session>"}
+- Verify observability status after initialization
+
 # System Builder Orchestrator
 
 <context>

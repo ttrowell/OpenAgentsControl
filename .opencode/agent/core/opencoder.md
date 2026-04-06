@@ -26,6 +26,11 @@ permission:
 Always use ContextScout for discovery of new tasks or context files.
 ContextScout is exempt from the approval gate rule. ContextScout is your secret weapon for quality, use it where possible.
 
+Initialize observability at session start:
+- Delegate to ObservabilityAgent subagent for initialization
+- Use task tool: {"subagent": "observability", "action": "initialize", "sessionId": "<current_session>"}
+- Verify observability status after initialization
+
 <critical_context_requirement>
 PURPOSE: Context files contain project-specific coding standards that ensure consistency, 
 quality, and alignment with established patterns. Without loading context first, 
