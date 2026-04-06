@@ -5,11 +5,18 @@
  * - instrumentedTool: Track tool execution
  * - instrumentedAgent: Track agent execution
  * - instrumentedLLM: Track LLM calls with automatic model detection
+ * 
+ * All hooks capture rich context including:
+ * - Agent info (name, type, version)
+ * - Task info (goal, taskId)
+ * - Build info (git hash, branch)
+ * - Error stack traces
  */
 
 import { startActiveObservation, getActiveTraceId } from "@langfuse/tracing";
-import { recordInference, getModelSummary, formatCost } from "../collectors/model-collector.js";
-import { recordToolCall } from "../collectors/session-collector.js";
+import { recordInference } from "../collectors/model-collector.js";
+import { recordToolCall, getTraceContext, getCurrentSession } from "../collectors/session-collector.js";
+import { captureError } from "../trace-context.js";
 import {
   getCurrentModel,
   detectFromHeaders,
@@ -49,6 +56,12 @@ export interface AgentResult<T = unknown> {
 
 /**
  * Instrument a tool call with automatic tracing
+ * 
+ * Captures:
+ * - Tool name and arguments
+ * - Execution time
+ * - Success/failure with error stack trace
+ * - Agent, task, and build context
  */
 export async function instrumentedTool<T>(
   name: string,
@@ -56,14 +69,20 @@ export async function instrumentedTool<T>(
   fn: () => Promise<T>
 ): Promise<ToolCallResult<T>> {
   const start = Date.now();
-  let success = true;
-  let errorMessage: string | undefined;
+  const traceCtx = getTraceContext();
+  const sessionCtx = getCurrentSession();
 
   try {
     const result = await fn();
 
     // Record in session collector
-    await recordToolCall(name, true, Date.now() - start);
+    await recordToolCall(name, true, Date.now() - start, {
+      toolArgs: args,
+      agentName: sessionCtx?.agentName,
+      agentType: sessionCtx?.agentType,
+      taskId: sessionCtx?.task?.taskId,
+      gitHash: traceCtx?.build.gitHash,
+    });
 
     return {
       result,
@@ -71,17 +90,26 @@ export async function instrumentedTool<T>(
       success: true,
     };
   } catch (err) {
-    success = false;
-    errorMessage = err instanceof Error ? err.message : String(err);
+    const errCtx = captureError(err);
 
-    // Record failed tool call
-    await recordToolCall(name, false, Date.now() - start, { error: errorMessage });
+    // Record failed tool call with enhanced error details
+    await recordToolCall(name, false, Date.now() - start, {
+      toolArgs: args,
+      agentName: sessionCtx?.agentName,
+      agentType: sessionCtx?.agentType,
+      taskId: sessionCtx?.task?.taskId,
+      gitHash: traceCtx?.build.gitHash,
+      // Enhanced error details
+      errorMessage: errCtx.message,
+      errorStack: errCtx.stack,
+      errorName: errCtx.name,
+    });
 
     return {
       result: undefined as T,
       durationMs: Date.now() - start,
       success: false,
-      error: errorMessage,
+      error: errCtx.message,
     };
   }
 }
@@ -93,6 +121,13 @@ export async function instrumentedTool<T>(
  * 1. Response headers (actual model used)
  * 2. Environment variable (CURRENT_MODEL)
  * 3. Config default
+ * 
+ * Captures:
+ * - Model info (name, provider)
+ * - Token usage
+ * - Latency and cost
+ * - Agent, task, and build context
+ * - Error stack traces on failure
  */
 export async function instrumentedLLM<T>(
   config: {
@@ -109,6 +144,8 @@ export async function instrumentedLLM<T>(
   }>
 ): Promise<LLMCallResult<T>> {
   const start = Date.now();
+  const traceCtx = getTraceContext();
+  const sessionCtx = getCurrentSession();
 
   // Get model before call (may be updated after response)
   const preCallModel = getCurrentModel(config.model);
@@ -141,7 +178,7 @@ export async function instrumentedLLM<T>(
     const { calculateCost } = await import("../collectors/model-collector.js");
     const cost = calculateCost(modelInfo.model, inputTokens, outputTokens);
 
-    // Record inference
+    // Record inference with enhanced context
     recordInference({
       model: modelInfo.model,
       provider: modelInfo.provider,
@@ -149,6 +186,17 @@ export async function instrumentedLLM<T>(
       outputTokens,
       latencyMs: durationMs,
       cost,
+      // Enhanced metadata
+      metadata: {
+        agentName: sessionCtx?.agentName,
+        agentType: sessionCtx?.agentType,
+        taskId: sessionCtx?.task?.taskId,
+        taskGoal: sessionCtx?.task?.goal?.slice(0, 200),
+        gitHash: traceCtx?.build.gitHash,
+        gitBranch: traceCtx?.build.gitBranch,
+        buildVersion: traceCtx?.build.version,
+        detectedFrom: modelInfo.detectedFrom,
+      },
     });
 
     // Extract content from response
@@ -163,17 +211,26 @@ export async function instrumentedLLM<T>(
       model: modelInfo.model,
     };
   } catch (err) {
+    const errCtx = captureError(err);
     const durationMs = Date.now() - start;
-    const errorMessage = err instanceof Error ? err.message : String(err);
 
-    // Record failed inference
+    // Record failed inference with enhanced error details
     recordInference({
       model: preCallModel.model,
       provider: preCallModel.provider,
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: durationMs,
-      error: errorMessage,
+      error: errCtx.message,
+      metadata: {
+        agentName: sessionCtx?.agentName,
+        agentType: sessionCtx?.agentType,
+        taskId: sessionCtx?.task?.taskId,
+        gitHash: traceCtx?.build.gitHash,
+        // Enhanced error details
+        errorStack: errCtx.stack,
+        errorName: errCtx.name,
+      },
     });
 
     throw err;
@@ -182,6 +239,13 @@ export async function instrumentedLLM<T>(
 
 /**
  * Instrument an agent execution
+ * 
+ * Captures:
+ * - Agent name and task metadata
+ * - Execution time
+ * - Success/failure with error stack trace
+ * - Agent, task, and build context
+ * - Full span update capability for custom metadata
  */
 export async function instrumentedAgent<T>(
   name: string,
@@ -189,25 +253,43 @@ export async function instrumentedAgent<T>(
   fn: (span: { update: (data: Record<string, unknown>) => void }) => Promise<T>
 ): Promise<AgentResult<T>> {
   const start = Date.now();
+  const traceCtx = getTraceContext();
+  const sessionCtx = getCurrentSession();
   let toolCount = 0;
   let success = true;
   let errorMessage: string | undefined;
+
+  // Build enhanced metadata with context
+  const buildSpanMetadata = (extra?: Record<string, unknown>) => ({
+    ...metadata,
+    // Agent context
+    agentName: sessionCtx?.agentName || metadata.agentName,
+    agentType: sessionCtx?.agentType || metadata.agentType,
+    agentVersion: traceCtx?.build.version,
+    // Task context
+    taskId: sessionCtx?.task?.taskId || metadata.taskId,
+    taskGoal: sessionCtx?.task?.goal || metadata.taskGoal,
+    // Build context
+    gitHash: traceCtx?.build.gitHash,
+    gitBranch: traceCtx?.build.gitBranch,
+    buildVersion: traceCtx?.build.version,
+    // System context
+    hostname: traceCtx?.system.hostname,
+    platform: traceCtx?.system.platform,
+    nodeVersion: traceCtx?.system.nodeVersion,
+    cwd: traceCtx?.system.cwd,
+    // Timing
+    startTime: new Date().toISOString(),
+    traceId: getActiveTraceId(),
+    ...extra,
+  });
 
   try {
     const result = await startActiveObservation(`agent:${name}`, async (span) => {
       span.update({
         input: metadata,
-        metadata: {
-          ...metadata,
-          startTime: new Date().toISOString(),
-          traceId: getActiveTraceId(),
-        },
+        metadata: buildSpanMetadata(),
       });
-
-      // Track tool count by wrapping recordToolCall
-      const originalRecord = recordToolCall;
-      // Note: Can't easily intercept tool calls without modifying session collector
-      // This would need integration at the session level
 
       try {
         const agentResult = await fn({
@@ -218,22 +300,25 @@ export async function instrumentedAgent<T>(
 
         span.update({
           output: { success: true },
-          metadata: {
-            ...metadata,
+          metadata: buildSpanMetadata({
             endTime: new Date().toISOString(),
             durationMs: Date.now() - start,
-          },
+          }),
         });
 
         return agentResult;
       } catch (err) {
+        const errCtx = captureError(err);
         span.update({
-          output: { success: false, error: err instanceof Error ? err.message : String(err) },
-          metadata: {
-            ...metadata,
+          output: { success: false, error: errCtx.message },
+          metadata: buildSpanMetadata({
             endTime: new Date().toISOString(),
             durationMs: Date.now() - start,
-          },
+            // Enhanced error details
+            errorMessage: errCtx.message,
+            errorStack: errCtx.stack,
+            errorName: errCtx.name,
+          }),
         });
         throw err;
       }
@@ -246,8 +331,9 @@ export async function instrumentedAgent<T>(
       toolCount,
     };
   } catch (err) {
+    const errCtx = captureError(err);
     success = false;
-    errorMessage = err instanceof Error ? err.message : String(err);
+    errorMessage = errCtx.message;
 
     return {
       result: undefined as T,
@@ -261,14 +347,34 @@ export async function instrumentedAgent<T>(
 
 /**
  * Create a simple span without wrapping a function
+ * 
+ * Automatically includes trace context if available.
  */
 export async function createSpan(
   name: string,
   metadata?: Record<string, unknown>
 ): Promise<void> {
+  const traceCtx = getTraceContext();
+  const sessionCtx = getCurrentSession();
+
   await startActiveObservation(name, async (span) => {
     span.update({
-      metadata: metadata || {},
+      metadata: {
+        // Include context if available
+        ...(traceCtx && {
+          gitHash: traceCtx.build.gitHash,
+          gitBranch: traceCtx.build.gitBranch,
+          buildVersion: traceCtx.build.version,
+          hostname: traceCtx.system.hostname,
+        }),
+        ...(sessionCtx && {
+          agentName: sessionCtx.agentName,
+          agentType: sessionCtx.agentType,
+          taskId: sessionCtx.task?.taskId,
+        }),
+        // User-provided metadata
+        ...(metadata || {}),
+      },
     });
   });
 }

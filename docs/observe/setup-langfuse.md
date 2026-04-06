@@ -1,5 +1,29 @@
 # Langfuse Setup for OpenAgents Control
 
+## File Structure
+
+```
+.opencode/observability/
+├── instrumentation.ts        # Main SDK initialization (import first!)
+├── instrumentation.mjs       # ESM version for scripts
+├── trace-context.ts          # Rich trace metadata (agent/task/user/build context)
+├── config/
+│   └── observability.config.ts  # Configuration loader
+├── collectors/
+│   ├── session-collector.ts    # Session tracing with sessionId linking
+│   ├── model-collector.ts      # Model metrics and pricing
+│   ├── tool-collector.ts      # Tool execution metrics
+│   └── cost-collector.ts      # Cost tracking per model
+├── hooks/
+│   ├── model-detector.ts      # Auto model detection from API headers
+│   ├── auto-instrument.ts     # instrumentedTool/LLM/Agent wrappers
+│   └── index.ts              # Barrel exports
+└── scripts/
+    ├── test-langfuse.mjs      # Basic Langfuse test
+    ├── test-collectors.ts     # Collectors integration test
+    └── test-auto-instrument.ts # Full auto-instrumentation test
+```
+
 ## Prerequisites
 
 - Node.js >= 18.0.0
@@ -208,6 +232,80 @@ curl -s -u "pk-lf-xxx:sk-lf-xxx" \
   "https://us.cloud.langfuse.com/api/public/sessions?limit=10"
 ```
 
+### Trace Context
+
+All traces automatically capture rich context for meaningful observability:
+
+#### Agent Context
+| Field | Description |
+|-------|-------------|
+| `agent.name` | Name of the agent (e.g., "openagent", "task-manager") |
+| `agent.type` | Type of agent (e.g., "agent", "subagent", "orchestrator") |
+| `agent.version` | Agent version from package.json |
+
+#### Task Context
+| Field | Description |
+|-------|-------------|
+| `task.id` | Unique task identifier |
+| `task.goal` | Goal/objective of the current task |
+| `task.workflowId` | Parent workflow ID (if applicable) |
+| `task.constraints` | List of constraints for the task |
+
+#### User Context
+| Field | Description |
+|-------|-------------|
+| `user.message` | Original user message (truncated to 500 chars) |
+| `user.turnNumber` | Conversation turn number |
+| `user.sessionType` | Type of session ("oac-session") |
+
+#### Build Context
+| Field | Description |
+|-------|-------------|
+| `build.gitHash` | Git commit hash (short, 8 chars) |
+| `build.gitBranch` | Current git branch |
+| `build.gitTag` | Git tag (if any) |
+| `build.commitMessage` | Latest commit message |
+| `build.version` | Version from package.json |
+| `build.buildTime` | ISO timestamp of build context capture |
+
+#### System Context
+| Field | Description |
+|-------|-------------|
+| `system.hostname` | Machine hostname |
+| `system.platform` | OS platform (darwin, linux, win32) |
+| `system.arch` | CPU architecture |
+| `system.nodeVersion` | Node.js version |
+| `system.cwd` | Current working directory |
+
+#### Enhanced Error Details
+On failures, traces capture:
+| Field | Description |
+|-------|-------------|
+| `error.message` | Error message |
+| `error.name` | Error name (e.g., "TypeError", "ReferenceError") |
+| `error.stack` | **Full stack trace** for debugging |
+| `error.code` | Error code (if applicable) |
+
+**Example usage:**
+```typescript
+import { startSession } from './observability/collectors/session-collector.ts';
+
+await startSession({
+  sessionId: 'my-session-123',
+  userId: 'user@example.com',
+  agentName: 'openagent',
+  agentType: 'orchestrator',
+  agentVersion: '1.2.0',
+  task: {
+    goal: 'Implement user authentication',
+    taskId: 'task-456',
+    constraints: ['use OAuth2', 'support Google login'],
+  },
+  userMessage: 'Please add authentication to the app',
+  turnNumber: 3,
+});
+```
+
 ### Session Collector
 
 Track session-level events:
@@ -292,6 +390,16 @@ const result = await instrumentedAgent('code-review', { repo: 'my-app' },
     return await runAnalysis();
   }
 );
+
+// Create custom spans manually
+import { createSpan } from './observability/hooks/auto-instrument.ts';
+
+await createSpan('custom-operation', async (span) => {
+  span.update({ input: { step: 1 } });
+  const result = await doSomething();
+  span.update({ output: { result } });
+  return result;
+});
 ```
 
 ### Model Detection
@@ -308,6 +416,39 @@ import { setCurrentModel } from './observability/hooks/auto-instrument.ts';
 
 setCurrentModel('claude-3-5-sonnet-20241022');
 ```
+
+#### Model Detector Functions
+
+The `model-detector.ts` module provides fine-grained model detection:
+
+```typescript
+import {
+  getCurrentModel,
+  setCurrentModel,
+  detectFromHeaders,
+  extractProvider,
+  type ModelInfo,
+} from './observability/hooks/model-detector.ts';
+
+// Get current model info
+const model = getCurrentModel();
+console.log(`${model.model} (from ${model.detectedFrom})`);
+
+// Detect from response headers
+const modelName = detectFromHeaders({
+  'x-anthropic-model': 'claude-3-5-sonnet-20241022',
+});
+// Returns: 'claude-3-5-sonnet-20241022'
+
+// Extract provider from model name
+const provider = extractProvider('claude-3-5-sonnet-20241022');
+// Returns: 'anthropic'
+```
+
+**Supported headers:**
+- `x-anthropic-model` (Anthropic)
+- `x-goog-api-model` (Google)
+- `openai-model` / `x-openai-model` (OpenAI)
 
 ### Tool Collector
 
@@ -343,6 +484,13 @@ Run the auto-instrumentation test:
 ```bash
 npx tsx .opencode/scripts/test-auto-instrument.ts
 ```
+
+This comprehensive test demonstrates:
+- Session creation with sessionId linking
+- Model detection from headers
+- Tool instrumentation with success/failure tracking
+- LLM call instrumentation with cost calculation
+- Cost and tool summary reporting
 
 ## CLI Commands Reference
 

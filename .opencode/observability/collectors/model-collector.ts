@@ -34,6 +34,7 @@ export interface InferenceRecord {
   cacheHit?: boolean;
   cost?: number;
   error?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // Model pricing (USD per 1M tokens) - approximate
