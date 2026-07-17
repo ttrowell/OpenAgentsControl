@@ -6,6 +6,7 @@
  * - Tracking session lifecycle events
  * - Linking session metrics to traces
  * - Capturing enhanced error details with stack traces
+ * - Detecting and loading project-specific observability modules
  * 
  * IMPORTANT: Uses Langfuse's sessionId field for proper session linking
  * @see https://langfuse.com/docs/observability/features/sessions
@@ -13,6 +14,8 @@
 
 import { startActiveObservation, propagateAttributes } from "@langfuse/tracing";
 import * as os from "node:os";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   createTraceContext,
   captureError,
@@ -28,6 +31,10 @@ import {
 
 // Re-export types
 export type { AgentContext, TaskContext, UserContext, TraceContext };
+
+// Project observability state
+let projectObservabilityLoaded = false;
+let projectObservabilityPath: string | null = null;
 
 // Types
 export interface SessionContext {
@@ -72,6 +79,118 @@ const getUsername = (): string => os.userInfo().username;
 const formatTimestamp = (date: Date = new Date()): string => date.toISOString();
 
 /**
+ * Detect if a project has observability enabled
+ * 
+ * Checks:
+ * 1. OBSERVABILITY_ENABLED=true in project .env
+ * 2. /observability/ folder exists in project
+ * 
+ * @param projectPath - The project directory to check
+ * @returns The path to the observability module if found, null otherwise
+ */
+export function detectProjectObservability(projectPath: string): string | null {
+  if (projectObservabilityLoaded && projectObservabilityPath) {
+    return projectObservabilityPath;
+  }
+
+  const obsFolder = path.join(projectPath, "observability");
+  const envFile = path.join(projectPath, ".env");
+
+  // Check 1: OBSERVABILITY_ENABLED=true in .env
+  if (fs.existsSync(envFile)) {
+    try {
+      const envContent = fs.readFileSync(envFile, "utf-8");
+      const hasEnabledFlag = /^OBSERVABILITY_ENABLED=true$/m.test(envContent) ||
+                            /^OBSERVABILITY_ENABLED=true$/m.test(envContent.replace(/\s/g, ""));
+      if (hasEnabledFlag) {
+        console.log(`[SessionCollector] Project observability enabled via .env: ${projectPath}`);
+        return obsFolder;
+      }
+    } catch (e) {
+      // Ignore errors reading .env
+    }
+  }
+
+  // Check 2: /observability/ folder exists
+  if (fs.existsSync(obsFolder)) {
+    try {
+      const stat = fs.statSync(obsFolder);
+      if (stat.isDirectory()) {
+        console.log(`[SessionCollector] Project observability folder detected: ${obsFolder}`);
+        return obsFolder;
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Load project-specific observability module
+ * 
+ * Imports the project's ./observability/instrumentation.mjs if available.
+ * This allows projects to provide custom observability behavior.
+ * 
+ * @param projectPath - The project directory
+ * @returns true if loaded successfully, false otherwise
+ */
+export async function loadProjectObservability(projectPath: string): Promise<boolean> {
+  if (projectObservabilityLoaded) {
+    return true;
+  }
+
+  const obsPath = detectProjectObservability(projectPath);
+  if (!obsPath) {
+    return false;
+  }
+
+  try {
+    // Try to load the project's observability instrumentation
+    const instrumentationPath = path.join(obsPath, "instrumentation.mjs");
+    
+    if (fs.existsSync(instrumentationPath)) {
+      // Dynamic import - must be first import for OTel to work
+      await import(instrumentationPath);
+      projectObservabilityLoaded = true;
+      projectObservabilityPath = obsPath;
+      console.log(`[SessionCollector] Loaded project observability: ${instrumentationPath}`);
+      return true;
+    }
+
+    // Try .ts extension
+    const tsPath = path.join(obsPath, "instrumentation.ts");
+    if (fs.existsSync(tsPath)) {
+      await import(tsPath);
+      projectObservabilityLoaded = true;
+      projectObservabilityPath = obsPath;
+      console.log(`[SessionCollector] Loaded project observability: ${tsPath}`);
+      return true;
+    }
+
+  } catch (e) {
+    console.error(`[SessionCollector] Failed to load project observability: ${e}`);
+  }
+
+  return false;
+}
+
+/**
+ * Check if project observability is loaded
+ */
+export function isProjectObservabilityLoaded(): boolean {
+  return projectObservabilityLoaded;
+}
+
+/**
+ * Get the loaded project observability path
+ */
+export function getProjectObservabilityPath(): string | null {
+  return projectObservabilityPath;
+}
+
+/**
  * Start a new session observation
  * 
  * Creates a trace with rich context:
@@ -85,6 +204,11 @@ const formatTimestamp = (date: Date = new Date()): string => date.toISOString();
  * @see https://langfuse.com/docs/observability/features/sessions
  */
 export async function startSession(context: SessionContext): Promise<void> {
+  // Try to load project-specific observability if available
+  if (context.projectPath && !projectObservabilityLoaded) {
+    await loadProjectObservability(context.projectPath);
+  }
+
   currentSession = context;
   sessionStartTime = Date.now();
   toolCount = 0;

@@ -10,6 +10,10 @@ export {
   endSession,
   getCurrentSession,
   isSessionActive,
+  detectProjectObservability,
+  loadProjectObservability,
+  isProjectObservabilityLoaded,
+  getProjectObservabilityPath,
   type SessionContext,
   type SessionMetrics,
 } from "./session-collector.js";

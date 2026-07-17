@@ -1,9 +1,11 @@
 import { initObservability, getObservability } from '../../../observability/index.mjs';
 import { loadConfig } from '../../../observability/config/observability.config.js';
+import { detectProjectObservability, loadProjectObservability, isProjectObservabilityLoaded, getProjectObservabilityPath } from '../../../observability/collectors/session-collector.ts';
 
 export interface ObservabilityAgentConfig {
-  action: 'initialize' | 'send_trace' | 'configure' | 'status' | 'test_connection';
+  action: 'initialize' | 'send_trace' | 'configure' | 'status' | 'test_connection' | 'detect_project';
   sessionId?: string;
+  projectPath?: string;
   traceData?: any;
   config?: any;
 }
@@ -29,7 +31,10 @@ export class ObservabilityAgent {
   async execute(config: ObservabilityAgentConfig): Promise<any> {
     switch (config.action) {
       case 'initialize':
-        return this.initializeObservability(config.sessionId);
+        return this.initializeObservability(config.sessionId, config.projectPath);
+
+      case 'detect_project':
+        return this.detectProjectObservability(config.projectPath);
 
       case 'send_trace':
         return this.sendTrace(config.traceData);
@@ -48,7 +53,7 @@ export class ObservabilityAgent {
     }
   }
 
-  private async initializeObservability(sessionId?: string): Promise<any> {
+  private async initializeObservability(sessionId?: string, projectPath?: string): Promise<any> {
     try {
       console.log('🔧 Initializing observability system...');
 
@@ -56,6 +61,16 @@ export class ObservabilityAgent {
       this.observability = initObservability();
 
       console.log('✅ Observability system initialized');
+
+      // Detect and load project-specific observability if projectPath provided
+      if (projectPath) {
+        const detected = detectProjectObservability(projectPath);
+        if (detected) {
+          console.log(`🔍 Project observability detected: ${detected}`);
+          await loadProjectObservability(projectPath);
+          console.log(`📦 Project observability loaded: ${getProjectObservabilityPath()}`);
+        }
+      }
 
       // Create initial session trace if sessionId provided
       if (sessionId && this.observability) {
@@ -76,7 +91,9 @@ export class ObservabilityAgent {
         status: 'success',
         message: 'Observability initialized successfully',
         sessionId,
-        traceCreated: !!sessionId
+        traceCreated: !!sessionId,
+        projectObservabilityLoaded: isProjectObservabilityLoaded(),
+        projectObservabilityPath: getProjectObservabilityPath()
       };
 
     } catch (error) {
@@ -87,6 +104,28 @@ export class ObservabilityAgent {
         error: error.message
       };
     }
+  }
+
+  private async detectProjectObservability(projectPath?: string): Promise<any> {
+    if (!projectPath) {
+      return {
+        status: 'error',
+        message: 'projectPath is required'
+      };
+    }
+
+    const detected = detectProjectObservability(projectPath);
+    const isLoaded = isProjectObservabilityLoaded();
+    const path = getProjectObservabilityPath();
+
+    return {
+      status: 'success',
+      projectPath,
+      observabilityDetected: !!detected,
+      observabilityPath: detected,
+      isLoaded,
+      loadedPath: path
+    };
   }
 
   private async sendTrace(traceData: any): Promise<any> {
@@ -248,8 +287,12 @@ export class ObservabilityAgent {
 export const observabilityAgent = new ObservabilityAgent();
 
 // Export convenience functions
-export async function initializeObservability(sessionId?: string) {
-  return observabilityAgent.execute({ action: 'initialize', sessionId });
+export async function initializeObservability(sessionId?: string, projectPath?: string) {
+  return observabilityAgent.execute({ action: 'initialize', sessionId, projectPath });
+}
+
+export async function detectProjectObservability(projectPath: string) {
+  return observabilityAgent.execute({ action: 'detect_project', projectPath });
 }
 
 export async function sendTrace(traceData: any) {

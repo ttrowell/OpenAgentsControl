@@ -20,6 +20,11 @@ observabilitySDK.start();
 
 console.log("✅ Langfuse OpenTelemetry initialized");
 
+// Auto-detect and load project-specific observability
+// This runs after framework initialization and checks if the current project
+// has its own observability setup
+import "./auto-init.mjs";
+
 // Helper for graceful shutdown
 export async function flushAndShutdown() {
   await langfuseSpanProcessor.forceFlush();

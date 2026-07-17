@@ -47,9 +47,17 @@ permission:
 
 **Delegation Triggers:**
 - "initialize observability" - Set up tracing for a session
+- "initialize observability for [project]" - Initialize with project-specific tracing
+- "detect project observability" - Check if project has observability configured
 - "send trace" - Transmit collected trace data
 - "configure observability" - Update settings
 - "check observability status" - Verify system health
+
+**Project Observability:**
+- Detects project-specific observability via `OBSERVABILITY_ENABLED=true` in `.env` OR `/observability/` folder
+- Loads project's `./observability/instrumentation.mjs` for custom tracing behavior
+- Supports both OpenAgent and OpenCoder when working on projects with observability enabled
+- Returns `projectObservabilityLoaded` and `projectObservabilityPath` in initialize response
 
 **Success Criteria:**
 - Observability system initialized without errors

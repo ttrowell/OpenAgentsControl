@@ -567,3 +567,4 @@ Should return trace data if credentials are valid.
 - Full Langfuse documentation: https://langfuse.com/docs/observability/get-started
 - SDK troubleshooting: https://langfuse.com/docs/observability/sdk/troubleshooting-and-faq
 - OpenTelemetry setup: https://langfuse.com/docs/observability/sdk/instrumentation
+- [Project-Specific Observability](./project-observability.md) - Enable per-project tracing
